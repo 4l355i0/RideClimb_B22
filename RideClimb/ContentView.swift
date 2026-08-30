@@ -20,6 +20,7 @@ struct ContentView: View {
     @State private var draftCassette = ""
     @State private var drivetrainDirty = false
     @State private var appliedMessage = false
+    @AppStorage("drivetrainMode") private var drivetrainMode = "COG"
 
     private let timer = Timer.publish(every: 0.2, on: .main, in: .common).autoconnect()
 
@@ -73,102 +74,82 @@ struct ContentView: View {
         NavigationStack {
             GeometryReader { geo in
                 let compact = geo.size.height < 700
-                let cardRadius: CGFloat = 22
-                let sidePadding: CGFloat = 14
-                let verticalGap: CGFloat = compact ? 8 : 10
-
-                VStack(spacing: verticalGap) {
+                VStack(spacing: compact ? 7 : 9) {
                     connectionStrip
-                        .padding(.horizontal, 2)
 
-                    // Main performance cards: intentionally dominant.
                     HStack(spacing: 10) {
-                        intensityTile(title: "POWER 3s",
-                                      value: "\(trainer.power3sW)",
-                                      unit: "W",
-                                      subtitle: powerSubtitle,
-                                      color: powerZoneColor)
-                        intensityTile(title: "HEART RATE",
-                                      value: trainer.heartRateBPM > 0 ? "\(trainer.heartRateBPM)" : "—",
-                                      unit: trainer.heartRateBPM > 0 ? "bpm" : "",
-                                      subtitle: hrSubtitle,
-                                      color: hrZoneColor)
+                        heroMetric("POWER", "\(trainer.power3sW)", "W", powerSubtitle, powerZoneColor)
+                        heroMetric("HEART RATE",
+                                   trainer.heartRateBPM > 0 ? "\(trainer.heartRateBPM)" : "—",
+                                   trainer.heartRateBPM > 0 ? "bpm" : "",
+                                   hrSubtitle, hrZoneColor)
                     }
-                    .frame(height: compact ? 122 : 138)
+                    .frame(height: compact ? 116 : 132)
 
-                    // Secondary metrics.
-                    HStack(spacing: 8) {
-                        metricCard("GRADE", String(format: "%.1f%%", ride.currentGradePercent))
-                        metricCard("CADENCE", String(format: "%.0f", trainer.cadenceRPM), suffix: "rpm")
-                        metricCard("SPEED", String(format: "%.1f", ride.virtualSpeedKPH), suffix: "km/h")
-                        metricCard("GEAR", ride.currentGearLabel)
+                    HStack(spacing: 7) {
+                        dashMetric("GRADE", String(format: "%.1f", ride.currentGradePercent), "%")
+                        dashMetric("CADENCE", String(format: "%.0f", trainer.cadenceRPM), "rpm")
+                        dashMetric("SPEED", String(format: "%.1f", ride.virtualSpeedKPH), "km/h")
+                        dashMetric("GEAR", drivetrainMode == "REAL" ? "REAL" : ride.currentGearLabel, "")
                     }
-                    .frame(height: compact ? 62 : 68)
+                    .frame(height: compact ? 60 : 66)
 
-                    // Route profile card.
-                    Group {
+                    VStack(spacing: 5) {
                         if let route = ride.route {
-                            VStack(spacing: 4) {
-                                RouteProfileView(route: route, progress: ride.progress)
-                                    .frame(height: compact ? 88 : 105)
-
-                                HStack {
-                                    Text(ride.routeName ?? "GPX")
-                                        .font(.caption.weight(.semibold))
-                                        .lineLimit(1)
-                                    Spacer()
-                                    Text(String(format: "%.1f / %.1f km",
-                                                ride.distanceM / 1000,
-                                                route.totalDistanceM / 1000))
-                                        .font(.caption.monospacedDigit())
-                                }
-                                .foregroundStyle(.secondary)
+                            RouteProfileView(route: route, progress: ride.progress)
+                                .frame(height: compact ? 92 : 112)
+                            HStack {
+                                Text(ride.routeName ?? "GPX").lineLimit(1)
+                                Spacer()
+                                Text(String(format: "%.1f / %.1f km", ride.distanceM/1000, route.totalDistanceM/1000))
+                                    .monospacedDigit()
                             }
-                            .padding(10)
-                            .background(.thinMaterial, in: RoundedRectangle(cornerRadius: cardRadius))
+                            .font(.caption.weight(.semibold))
+                            .foregroundStyle(.secondary)
                         } else {
-                            VStack(spacing: 6) {
-                                Image(systemName: "mountain.2.fill")
-                                    .font(.title2)
-                                    .foregroundStyle(.secondary)
-                                Text("Select a route in Setup")
-                                    .font(.subheadline.weight(.semibold))
-                                    .foregroundStyle(.secondary)
-                            }
-                            .frame(maxWidth: .infinity, minHeight: compact ? 108 : 125)
-                            .background(.thinMaterial, in: RoundedRectangle(cornerRadius: cardRadius))
+                            Spacer()
+                            Image(systemName: "mountain.2.fill").font(.title2).foregroundStyle(.secondary)
+                            Text("Choose a GPX route in Setup").font(.subheadline.weight(.semibold)).foregroundStyle(.secondary)
+                            Spacer()
                         }
                     }
+                    .padding(10)
+                    .frame(maxWidth: .infinity, minHeight: compact ? 118 : 138)
+                    .background(.thinMaterial, in: RoundedRectangle(cornerRadius: 20))
 
-                    // Large shifter buttons, easy to hit while riding.
-                    HStack(spacing: 12) {
-                        shiftPad(
-                            title: "CHAINRING",
-                            minus: { ride.shiftFrontSmaller(); syncNativeGear() },
-                            plus: { ride.shiftFrontLarger(); syncNativeGear() },
-                            minusDisabled: ride.frontChainrings.count < 2 || ride.frontIndex == 0,
-                            plusDisabled: ride.frontChainrings.count < 2 || ride.frontIndex >= ride.frontChainrings.count - 1
-                        )
-
-                        shiftPad(
-                            title: "SPROCKET",
-                            minus: { ride.shiftRearSmaller(); syncNativeGear() },
-                            plus: { ride.shiftRearLarger(); syncNativeGear() },
-                            minusDisabled: ride.rearIndex == 0,
-                            plusDisabled: ride.rearIndex >= ride.cassette.count - 1
-                        )
+                    if drivetrainMode == "COG" {
+                        HStack(spacing: 12) {
+                            dashboardShifter("CHAINRING",
+                                             minus: { ride.shiftFrontSmaller(); syncNativeGear() },
+                                             plus: { ride.shiftFrontLarger(); syncNativeGear() },
+                                             minusDisabled: ride.frontChainrings.count < 2 || ride.frontIndex == 0,
+                                             plusDisabled: ride.frontChainrings.count < 2 || ride.frontIndex >= ride.frontChainrings.count - 1)
+                            dashboardShifter("SPROCKET",
+                                             minus: { ride.shiftRearSmaller(); syncNativeGear() },
+                                             plus: { ride.shiftRearLarger(); syncNativeGear() },
+                                             minusDisabled: ride.rearIndex == 0,
+                                             plusDisabled: ride.rearIndex >= ride.cassette.count - 1)
+                        }
+                        .frame(height: compact ? 70 : 78)
+                    } else {
+                        HStack {
+                            Image(systemName: "bicycle")
+                            VStack(alignment: .leading, spacing: 2) {
+                                Text("REAL DRIVETRAIN").font(.caption.bold())
+                                Text("Use the bike's physical shifters").font(.caption2).foregroundStyle(.secondary)
+                            }
+                            Spacer()
+                            Text("1.00×").font(.headline.monospacedDigit())
+                        }
+                        .padding(.horizontal, 14)
+                        .frame(height: compact ? 58 : 64)
+                        .background(.thinMaterial, in: RoundedRectangle(cornerRadius: 18))
                     }
-                    .frame(height: compact ? 72 : 82)
 
-                    // Ride controls only. GPX import lives in Setup.
                     HStack(spacing: 12) {
                         Button {
-                            if ride.isRiding {
-                                ride.pauseRide()
-                            } else {
-                                syncNativeGear()
-                                ride.startRide()
-                            }
+                            if ride.isRiding { ride.pauseRide() }
+                            else { syncNativeGear(); ride.startRide() }
                         } label: {
                             Label(ride.isRiding ? "Pause" : "Start",
                                   systemImage: ride.isRiding ? "pause.fill" : "play.fill")
@@ -189,11 +170,9 @@ struct ContentView: View {
                         .controlSize(.large)
                         .disabled(ride.route == nil)
                     }
-                    .frame(height: compact ? 46 : 52)
                 }
-                .padding(.horizontal, sidePadding)
-                .padding(.top, 4)
-                .padding(.bottom, 4)
+                .padding(.horizontal, 12)
+                .padding(.vertical, 5)
                 .frame(width: geo.size.width, height: geo.size.height, alignment: .top)
             }
             .navigationTitle("RideClimb")
@@ -204,13 +183,38 @@ struct ContentView: View {
     private var setupPage: some View {
         NavigationStack {
             Form {
+                Section("Ride mode") {
+                    Picker("Shifting", selection: $drivetrainMode) {
+                        Text("COG / Virtual").tag("COG")
+                        Text("Real drivetrain").tag("REAL")
+                    }
+                    .pickerStyle(.segmented)
+                    .onChange(of: drivetrainMode) { _, newMode in
+                        if newMode == "REAL" {
+                            setRealDrivetrainNeutral()
+                        } else {
+                            syncNativeGear()
+                        }
+                    }
+
+                    if drivetrainMode == "COG" {
+                        Text("RideClimb converts your selected chainring and cassette to the closest native virtual gear.")
+                            .font(.caption).foregroundStyle(.secondary)
+                    } else {
+                        Text("RideClimb holds the virtual drivetrain at 1.00×. Shift with the bike's real drivetrain.")
+                            .font(.caption).foregroundStyle(.secondary)
+                    }
+                }
+
                 Section("Route") {
                     Button("Import GPX") { showImporter = true }
                     if let route = ride.route {
                         Text(ride.routeName ?? "GPX")
-                        Text(String(format: "%.1f km", route.totalDistanceM/1000)).foregroundStyle(.secondary)
+                        Text(String(format: "%.1f km", route.totalDistanceM/1000))
+                            .foregroundStyle(.secondary)
                     }
                 }
+
                 Section("Smart trainer") {
                     HStack {
                         Button("Scan") { trainer.startScan() }
@@ -245,7 +249,8 @@ struct ContentView: View {
                     Stepper("FTP: \(ride.ftpW) W", value: $ride.ftpW, in: 50...500, step: 5)
                     Stepper("HR max: \(ride.maxHR) bpm", value: $ride.maxHR, in: 100...230)
                 }
-                Section("Drivetrain") {
+                if drivetrainMode == "COG" {
+                    Section("Virtual drivetrain") {
                     Picker("Chainrings", selection: dirtyBinding($draftChainringCount)) {
                         Text("1x").tag(1); Text("2x").tag(2)
                     }.pickerStyle(.segmented)
@@ -262,6 +267,7 @@ struct ContentView: View {
                     .disabled(!drivetrainDirty)
                     Text("Current: \(ride.frontChainrings.map(String.init).joined(separator: "/")) × \(ride.cassette.map(String.init).joined(separator: "-"))")
                         .font(.caption).foregroundStyle(.secondary)
+                    }
                 }
             }
             .navigationTitle("Setup")
@@ -335,58 +341,55 @@ struct ContentView: View {
         }.frame(maxWidth: .infinity)
     }
 
-    private func metricCard(_ title: String, _ value: String, suffix: String = "") -> some View {
-        VStack(spacing: 3) {
-            Text(title)
-                .font(.system(size: 10, weight: .bold))
-                .foregroundStyle(.secondary)
-            HStack(alignment: .firstTextBaseline, spacing: 2) {
+    private func heroMetric(_ title: String, _ value: String, _ unit: String,
+                            _ subtitle: String, _ color: Color) -> some View {
+        VStack(alignment: .leading, spacing: 3) {
+            Text(title).font(.caption.bold()).foregroundStyle(.secondary)
+            Spacer(minLength: 0)
+            HStack(alignment: .firstTextBaseline, spacing: 3) {
                 Text(value)
-                    .font(.system(size: 22, weight: .bold, design: .rounded))
-                    .minimumScaleFactor(0.55)
-                    .lineLimit(1)
-                if !suffix.isEmpty {
-                    Text(suffix)
-                        .font(.caption2.weight(.semibold))
-                        .foregroundStyle(.secondary)
-                }
+                    .font(.system(size: 46, weight: .bold, design: .rounded))
+                    .minimumScaleFactor(0.55).lineLimit(1)
+                Text(unit).font(.headline.bold())
             }
+            .foregroundStyle(color)
+            Text(subtitle).font(.caption.bold()).foregroundStyle(color).lineLimit(1)
         }
-        .frame(maxWidth: .infinity, maxHeight: .infinity)
-        .background(.thinMaterial, in: RoundedRectangle(cornerRadius: 16))
+        .padding(12)
+        .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .leading)
+        .background(color.opacity(0.10), in: RoundedRectangle(cornerRadius: 22))
+        .overlay(RoundedRectangle(cornerRadius: 22).stroke(color.opacity(0.24)))
     }
 
-    private func shiftPad(title: String,
-                          minus: @escaping () -> Void,
-                          plus: @escaping () -> Void,
-                          minusDisabled: Bool,
-                          plusDisabled: Bool) -> some View {
-        VStack(spacing: 6) {
-            Text(title)
-                .font(.caption2.bold())
-                .foregroundStyle(.secondary)
-
-            HStack(spacing: 10) {
-                Button(action: minus) {
-                    Image(systemName: "minus")
-                        .font(.title3.bold())
-                        .frame(maxWidth: .infinity, maxHeight: .infinity)
-                }
-                .buttonStyle(.bordered)
-                .disabled(minusDisabled)
-
-                Button(action: plus) {
-                    Image(systemName: "plus")
-                        .font(.title3.bold())
-                        .frame(maxWidth: .infinity, maxHeight: .infinity)
-                }
-                .buttonStyle(.borderedProminent)
-                .disabled(plusDisabled)
+    private func dashMetric(_ title: String, _ value: String, _ unit: String) -> some View {
+        VStack(spacing: 2) {
+            Text(title).font(.system(size: 9, weight: .bold)).foregroundStyle(.secondary)
+            HStack(alignment: .firstTextBaseline, spacing: 2) {
+                Text(value).font(.system(size: 20, weight: .bold, design: .rounded))
+                    .minimumScaleFactor(0.5).lineLimit(1)
+                if !unit.isEmpty { Text(unit).font(.system(size: 9, weight: .semibold)).foregroundStyle(.secondary) }
             }
         }
-        .padding(8)
         .frame(maxWidth: .infinity, maxHeight: .infinity)
-        .background(.thinMaterial, in: RoundedRectangle(cornerRadius: 20))
+        .background(.thinMaterial, in: RoundedRectangle(cornerRadius: 15))
+    }
+
+    private func dashboardShifter(_ title: String, minus: @escaping () -> Void, plus: @escaping () -> Void,
+                                  minusDisabled: Bool, plusDisabled: Bool) -> some View {
+        VStack(spacing: 5) {
+            Text(title).font(.caption2.bold()).foregroundStyle(.secondary)
+            HStack(spacing: 8) {
+                Button(action: minus) {
+                    Image(systemName: "minus").font(.title3.bold()).frame(maxWidth: .infinity, maxHeight: .infinity)
+                }.buttonStyle(.bordered).disabled(minusDisabled)
+                Button(action: plus) {
+                    Image(systemName: "plus").font(.title3.bold()).frame(maxWidth: .infinity, maxHeight: .infinity)
+                }.buttonStyle(.borderedProminent).disabled(plusDisabled)
+            }
+        }
+        .padding(7)
+        .frame(maxWidth: .infinity, maxHeight: .infinity)
+        .background(.thinMaterial, in: RoundedRectangle(cornerRadius: 18))
     }
 
     private func dirtyBinding<T>(_ binding: Binding<T>) -> Binding<T> {
@@ -416,7 +419,18 @@ struct ContentView: View {
 
     private func syncNativeGear() {
         lastSentResistance = nil
-        if trainer.nativeVirtualShiftReady { trainer.setVirtualRatio(ride.currentRatio) }
+        guard trainer.nativeVirtualShiftReady else { return }
+        if drivetrainMode == "REAL" {
+            trainer.setVirtualRatio(2.5)
+        } else {
+            trainer.setVirtualRatio(ride.currentRatio)
+        }
+    }
+
+    private func setRealDrivetrainNeutral() {
+        lastSentResistance = nil
+        guard trainer.nativeVirtualShiftReady else { return }
+        trainer.setVirtualRatio(2.5)
     }
 
     private var powerFraction: Double { ride.ftpW > 0 ? Double(trainer.power3sW)/Double(ride.ftpW) : 0 }
