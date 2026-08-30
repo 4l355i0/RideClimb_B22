@@ -97,7 +97,8 @@ struct ContentView: View {
                     VStack(spacing: 5) {
                         if let route = ride.route {
                             RouteProfileView(route: route, progress: ride.progress)
-                                .frame(height: compact ? 92 : 112)
+                                .frame(maxHeight: .infinity)
+
                             HStack {
                                 Text(ride.routeName ?? "GPX").lineLimit(1)
                                 Spacer()
@@ -107,14 +108,18 @@ struct ContentView: View {
                             .font(.caption.weight(.semibold))
                             .foregroundStyle(.secondary)
                         } else {
-                            Spacer()
-                            Image(systemName: "mountain.2.fill").font(.title2).foregroundStyle(.secondary)
-                            Text("Choose a GPX route in Setup").font(.subheadline.weight(.semibold)).foregroundStyle(.secondary)
-                            Spacer()
+                            Spacer(minLength: 0)
+                            Image(systemName: "mountain.2.fill")
+                                .font(.title2)
+                                .foregroundStyle(.secondary)
+                            Text("Choose a GPX route in Setup")
+                                .font(.subheadline.weight(.semibold))
+                                .foregroundStyle(.secondary)
+                            Spacer(minLength: 0)
                         }
                     }
                     .padding(10)
-                    .frame(maxWidth: .infinity, minHeight: compact ? 118 : 138)
+                    .frame(maxWidth: .infinity, minHeight: compact ? 250 : 290, maxHeight: compact ? 250 : 290)
                     .background(.thinMaterial, in: RoundedRectangle(cornerRadius: 20))
 
                     if drivetrainMode == "COG" {
